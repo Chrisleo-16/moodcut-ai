@@ -1,7 +1,7 @@
 "use client";
 
-import { Button, ProgressBar } from "@heroui/react";
-import { useEffect, useRef, useState } from "react";
+import { ProgressBar } from "@heroui/react";
+import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from "react";
 
 import { FilmRow } from "@/components/film-row";
 import { CatalogueError, fetchCatalogue } from "@/lib/client-api";
@@ -35,9 +35,20 @@ type MoodStep = {
   detail?: string;
 };
 
-const SAMPLE_MOOD = "a quiet rainy Sunday";
+const PLACEHOLDERS = ["Exhausted but fun", "Need a good cry", "Rainy Sunday, a bit sad"] as const;
+
+const MOOD_CHIPS = [
+  "Exhausted but fun",
+  "Need a good cry",
+  "Rainy Sunday, a bit sad",
+  "Something thrilling",
+  "Quiet and strange",
+  "Warm and comforting",
+] as const;
+
 const STEP_HOLD_MS = 560;
 const SUMMARY_LEAD_MS = 400;
+const PLACEHOLDER_MS = 3200;
 
 const START_STEPS: MoodStep[] = [
   { id: "read", label: "Reading your mood", state: "pending" },
@@ -58,20 +69,24 @@ type Board = {
   result: MoodResult | null;
 };
 
-export function MoodSearch({ todayIso }: { todayIso: string }) {
+export function MoodSearch({ todayIso, initialQuery = "" }: { todayIso: string; initialQuery?: string }) {
   const setupIssue = firebaseSetupIssue();
   const railRef = useRef<HTMLElement>(null);
-  const [mood, setMood] = useState(setupIssue ? SAMPLE_MOOD : "");
+  const launched = useRef("");
+  const [mood, setMood] = useState(initialQuery);
   const [progress, setProgress] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
-  const [result, setResult] = useState<MoodResult | null>(() => (setupIssue ? localExample(SAMPLE_MOOD) : null));
+  const [result, setResult] = useState<MoodResult | null>(null);
   const [steps, setSteps] = useState<MoodStep[] | null>(null);
   const [details, setDetails] = useState(false);
   const [riseKey, setRiseKey] = useState(0);
   const [revealCard, setRevealCard] = useState(false);
-  const [showCards, setShowCards] = useState(() => Boolean(setupIssue));
+  const [showCards, setShowCards] = useState(false);
   const [live, setLive] = useState("");
+  const [exampleIndex, setExampleIndex] = useState(0);
+  const [reduceMotion, setReduceMotion] = useState(false);
+  const [fieldFocused, setFieldFocused] = useState(false);
   const runId = useRef(0);
 
   useEffect(() => {
@@ -81,11 +96,27 @@ export function MoodSearch({ todayIso }: { todayIso: string }) {
   }, []);
 
   useEffect(() => {
+    const media = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const apply = () => setReduceMotion(media.matches);
+    apply();
+    media.addEventListener("change", apply);
+    return () => media.removeEventListener("change", apply);
+  }, []);
+
+  useEffect(() => {
+    if (reduceMotion || fieldFocused || mood.trim().length > 0) return;
+    const timer = window.setInterval(() => {
+      setExampleIndex((current) => (current + 1) % PLACEHOLDERS.length);
+    }, PLACEHOLDER_MS);
+    return () => window.clearInterval(timer);
+  }, [reduceMotion, fieldFocused, mood]);
+
+  useEffect(() => {
     if (riseKey === 0) return;
     const node = railRef.current;
     if (!node) return;
     const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    node.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" });
+    node.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "nearest" });
   }, [riseKey, result]);
 
   async function onDownload() {
@@ -104,12 +135,13 @@ export function MoodSearch({ todayIso }: { todayIso: string }) {
     }
   }
 
-  async function onSearch() {
-    const text = mood.trim();
+  const runSearch = useCallback(async (raw: string) => {
+    const text = raw.trim();
     if (text.length < 2) {
       setMessage("Describe a mood in a few words.");
       return;
     }
+    setMood(text);
     const id = runId.current + 1;
     runId.current = id;
     const alive = () => runId.current === id;
@@ -143,38 +175,88 @@ export function MoodSearch({ todayIso }: { todayIso: string }) {
       await work.catch(() => undefined);
       if (alive()) setBusy(false);
     }
+  }, [setupIssue]);
+
+  useEffect(() => {
+    const text = initialQuery.trim();
+    if (text.length < 2) return;
+    if (launched.current === text) return;
+    launched.current = text;
+    void runSearch(text);
+  }, [initialQuery, runSearch]);
+
+  function onChipKeys(event: KeyboardEvent<HTMLDivElement>) {
+    const key = event.key;
+    if (key !== "ArrowRight" && key !== "ArrowLeft" && key !== "ArrowDown" && key !== "ArrowUp" && key !== "Home" && key !== "End") return;
+    const buttons = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>("button.mood-chip"));
+    const current = buttons.indexOf(document.activeElement as HTMLButtonElement);
+    if (current < 0 || buttons.length === 0) return;
+    event.preventDefault();
+    let next = current;
+    if (key === "ArrowRight" || key === "ArrowDown") next = (current + 1) % buttons.length;
+    else if (key === "ArrowLeft" || key === "ArrowUp") next = (current - 1 + buttons.length) % buttons.length;
+    else if (key === "Home") next = 0;
+    else next = buttons.length - 1;
+    buttons[next]?.focus();
   }
 
+  const placeholder = PLACEHOLDERS[exampleIndex] ?? PLACEHOLDERS[0];
+  const filmsActive = steps?.some((step) => step.id === "films" && step.state === "active") ?? false;
+
   return (
-    <section id="mood" className="sec" aria-labelledby="mood-heading">
-      <div className="sec-head">
-        <h2 id="mood-heading" className="display sec-title">
-          Mood
-        </h2>
-      </div>
+    <section id="mood" className="mood-hero" aria-labelledby="mood-heading" aria-busy={busy}>
       <p className="sr-only" aria-live="polite" aria-atomic="true">
         {live}
       </p>
-      <div className="mx-auto flex max-w-3xl flex-col gap-4 px-[var(--gutter)]">
-        <p className="max-w-xl text-sm leading-relaxed">
-          A short mood becomes genres and a few filters. The model runs on this computer when Chrome can, and in the cloud otherwise.
-        </p>
-        <input
-          id="mood-input"
-          value={mood}
-          aria-label="Mood"
-          onChange={(event) => setMood(event.target.value)}
-          placeholder="Quiet, rainy, a little funny"
-          className="h-14 border-b border-black bg-transparent text-lg uppercase outline-none"
-        />
-        <div className="flex flex-wrap gap-2">
-          <Button className="bg-black text-white" onPress={() => void onSearch()} isDisabled={busy} aria-busy={busy}>
-            {busy ? "Finding" : "Find films"}
-          </Button>
-          <Button variant="outline" onPress={() => void onDownload()} isDisabled={busy}>
-            Download on-device model
-          </Button>
-        </div>
+      <div className="mood-hero-cluster">
+        <h1 id="mood-heading" className="display mood-hero-title">
+          How do you feel tonight?
+        </h1>
+        <form
+          className="mood-form"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void runSearch(mood);
+          }}
+        >
+          <div className={mood.trim().length > 0 ? "mood-field has-value" : "mood-field"}>
+            <span className="mood-caret" aria-hidden="true" />
+            <input
+              id="mood-input"
+              className="mood-input"
+              value={mood}
+              onChange={(event) => setMood(event.target.value)}
+              onFocus={() => setFieldFocused(true)}
+              onBlur={() => setFieldFocused(false)}
+              placeholder={placeholder}
+              aria-labelledby="mood-heading"
+              aria-describedby="mood-hybrid mood-examples"
+              autoComplete="off"
+              enterKeyHint="search"
+            />
+          </div>
+          <p id="mood-hybrid" className="mood-hybrid">
+            Runs on your device with Gemini Nano when Chrome supports it, otherwise in the cloud.
+          </p>
+          <p id="mood-examples" className="sr-only">
+            Examples include Exhausted but fun, Need a good cry, and Rainy Sunday, a bit sad. Choose a chip or type your own mood.
+          </p>
+          <div className="mood-chips" role="group" aria-label="Mood examples" onKeyDown={onChipKeys}>
+            {MOOD_CHIPS.map((chip) => (
+              <button key={chip} type="button" className="mood-chip" onClick={() => void runSearch(chip)} disabled={busy}>
+                {chip}
+              </button>
+            ))}
+          </div>
+          <div className="mood-actions">
+            <button className="mood-find" type="submit" disabled={busy} aria-busy={busy}>
+              {busy ? "Finding" : "Find films"}
+            </button>
+            <button className="mood-download" type="button" onClick={() => void onDownload()} disabled={busy}>
+              Download on-device model
+            </button>
+          </div>
+        </form>
         {progress !== null ? (
           <ProgressBar aria-label="On-device model download" value={progress} minValue={0} maxValue={100}>
             <ProgressBar.Track>
@@ -183,20 +265,30 @@ export function MoodSearch({ todayIso }: { todayIso: string }) {
             <ProgressBar.Output />
           </ProgressBar>
         ) : null}
-        {message ? <p className="text-sm">{message}</p> : null}
-        {steps ? <MoodSteps steps={steps} onRetry={() => void onSearch()} retryDisabled={busy} /> : null}
-        {result ? (
-          <MoodSummary
-            result={result}
-            open={details}
-            reveal={revealCard}
-            onToggle={() => setDetails((value) => !value)}
-          />
-        ) : null}
+        {message ? <p className="mood-message">{message}</p> : null}
+        <div className="mood-results">
+          {steps ? <MoodSteps steps={steps} onRetry={() => void runSearch(mood)} retryDisabled={busy} /> : null}
+          {result ? (
+            <MoodSummary
+              result={result}
+              open={details}
+              reveal={revealCard}
+              onToggle={() => setDetails((value) => !value)}
+            />
+          ) : null}
+        </div>
       </div>
-      {steps?.some((step) => step.id === "films" && step.state === "active") ? <MoodSkeleton /> : null}
+      {filmsActive ? <MoodSkeleton /> : null}
       {showCards && result && result.items.length > 0 ? (
-        <FilmRow key={riseKey} title="For this mood" items={result.items} todayIso={todayIso} layout="regular" rise={riseKey > 0} sectionRef={railRef} />
+        <FilmRow
+          key={riseKey}
+          title="For this mood"
+          items={result.items}
+          todayIso={todayIso}
+          layout="regular"
+          rise={riseKey > 0}
+          sectionRef={railRef}
+        />
       ) : null}
     </section>
   );

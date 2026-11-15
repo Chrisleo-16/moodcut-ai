@@ -16,7 +16,7 @@ Find films and shows by mood, with Gemini Nano running on your device and a clou
 Give this about a minute in desktop Chrome.
 
 1. Open the live demo (TODO) or run the app locally and open [http://localhost:3000](http://localhost:3000).
-2. Scroll to the **Mood** section on the home page (`#mood`). Type a short mood and press **Find films**.
+2. The home page opens on the mood search. The headline reads **How do you feel tonight?** Type a short mood and press **Find films**, or choose a mood chip. From any page, open Search and choose **Search by mood** when the words read like a feeling. That route is `/mood?q=`, and it runs the same search on the home hero.
 3. Watch the steps under the field. They follow the real work: reading the mood, thinking on this device or asking the cloud model, turning that mood into genres, then finding films. A row of soft poster shapes shows while that catalogue request is running.
 4. Read the sentence under the steps. The chip beside it reads On your device or In the cloud. Show details opens the raw plan.
 
@@ -46,7 +46,7 @@ Moodcut is for you when you can describe a mood more easily than a title, on a l
 
 ```mermaid
 flowchart TD
-  mood["Mood typed on the home page"]
+  mood["Mood typed in the home hero"]
   lang["routeMoodLanguage"]
   prefer["Firebase AI Logic: InferenceMode.PREFER_ON_DEVICE"]
   onlyCloud["Firebase AI Logic: InferenceMode.ONLY_IN_CLOUD"]
@@ -71,7 +71,7 @@ flowchart TD
   api --> tmdb
 ```
 
-You type a mood in the home page field. `askMood()` in `lib/firebase-ai.ts` calls `routeMoodLanguage()` to decide which languages may stay on device. English, Japanese, Spanish, German, and French use `InferenceMode.PREFER_ON_DEVICE`. Any other language uses `InferenceMode.ONLY_IN_CLOUD`, so that prompt never waits on Nano.
+You type a mood in the home page hero, or you arrive there from Search by mood (`/mood?q=`). `askMood()` in `lib/firebase-ai.ts` calls `routeMoodLanguage()` to decide which languages may stay on device. English, Japanese, Spanish, German, and French use `InferenceMode.PREFER_ON_DEVICE`. Any other language uses `InferenceMode.ONLY_IN_CLOUD`, so that prompt never waits on Nano.
 
 `createMoodModel()` turns on App Check, then builds the model. `CLOUD_MODEL` on line 18 is `gemini-3.5-flash-lite`, the default cloud model named in the Firebase hybrid guide for JS SDK 13. The browser calls `generateContent()`. The reply has to match a schema: one to three genres from a fixed list, `mediaType` of `movie`, `tv`, or `any`, `era` of `any`, `classic`, `recent`, or `upcoming`, and `minVote` from 0 to 10.
 
@@ -79,7 +79,7 @@ If that JSON parses, the browser calls `/api/tmdb/discover/movie` and, when the 
 
 If the on-device text does not parse, and the SDK says the answer was not already from the cloud, Moodcut asks the cloud model once. The note under the chip then reads: "The on-device answer did not validate, so this list used the cloud model." If the cloud text also fails to parse, you get an error and no TMDB call.
 
-`PREFER_ON_DEVICE` does not wait for a download that is still running. `askMood()` starts `initializeDeviceModel()` and does not await it, so the chip can read In the cloud on that first search while Nano downloads. The **Download on-device model** button does await that call. The home page lists each of these stages as the code reaches them.
+`PREFER_ON_DEVICE` does not wait for a download that is still running. `askMood()` starts `initializeDeviceModel()` and does not await it, so the chip can read In the cloud on that first search while Nano downloads. The **Download on-device model** button does await that call. The home hero lists each of these stages under the field as the code reaches them.
 
 ```ts
   const ai = getAI(app, { backend: new GoogleAIBackend() });
@@ -114,7 +114,7 @@ Each link points at the `main` branch of this repository:
 - [`ensureAppCheck()`](https://github.com/Chrisleo-16/moodcut-ai/blob/main/lib/firebase-ai.ts#L67-L78) registers reCAPTCHA Enterprise.
 - [`lib/language.ts`](https://github.com/Chrisleo-16/moodcut-ai/blob/main/lib/language.ts#L25-L44) chooses on-device or cloud.
 - [`lib/mood-plan.ts`](https://github.com/Chrisleo-16/moodcut-ai/blob/main/lib/mood-plan.ts#L19-L77) parses the plan and builds the TMDB query.
-- [`components/mood-search.tsx`](https://github.com/Chrisleo-16/moodcut-ai/blob/main/components/mood-search.tsx#L205-L250) renders the steps, the summary, and the details toggle.
+- [`components/mood-search.tsx`](https://github.com/Chrisleo-16/moodcut-ai/blob/main/components/mood-search.tsx#L205-L250) renders the home hero, the steps, the summary, and the details toggle. [`lib/mood-query.ts`](https://github.com/Chrisleo-16/moodcut-ai/blob/main/lib/mood-query.ts) decides when Search should offer a mood, with no extra model call.
 - [`app/api/tmdb/[...path]/route.ts`](https://github.com/Chrisleo-16/moodcut-ai/blob/main/app/api/tmdb/%5B...path%5D/route.ts#L9-L25) is the only TMDB door from the browser.
 - [`lib/tmdb.ts`](https://github.com/Chrisleo-16/moodcut-ai/blob/main/lib/tmdb.ts#L91-L126) holds the key on the server.
 
@@ -188,9 +188,9 @@ The Firebase web config and the reCAPTCHA site key are public by design. They us
 
 ## Design
 
-The page is white with black type. Gold is `#b4841e`, used for the current nav link and a few labels. Display type is Anton, uppercase. UI type is Inter Tight. Nav links use Crimson Pro. Small labels use Montserrat. The home page opens with a full-bleed still, a title, and a trailer control. Rows of films sit under it. Mood search is a single field, two buttons, the chip, the plan, and a row of matches.
+The page is white with black type. Gold is `#b4841e`, used for the current nav link and a few labels. Display type is Anton, uppercase. UI type is Inter Tight. Nav links use Crimson Pro. Small labels use Montserrat. The home page opens with the mood search as the hero: the headline How do you feel tonight?, a large field, mood chips, and the line "Runs on your device with Gemini Nano when Chrome supports it, otherwise in the cloud." The summary sentence, the on-device or cloud chip, the steps, and the poster rail sit under that field. Catalogue rows, including trending, follow below. Film and series pages still open with a full-bleed still, a title, and a trailer control.
 
-> **TODO:** Screenshot of the home page, from the hero through the Mood field.
+> **TODO:** Screenshot of the home page, with the mood hero first and the catalogue rows below.
 >
 > **TODO:** Screenshot of a film page with the trailer control.
 >
@@ -200,9 +200,9 @@ What the interface actually implements for accessibility:
 
 - The document language is English (`lang="en"`). A "Skip to content" link points at `#content`.
 - `:focus-visible` draws a 2px outline, black on light surfaces and white on dark ones.
-- Icon buttons have `aria-label`. The menu and search drawers are modal dialogs. Search is a combobox with a listbox, and the arrow keys, Enter, and Escape work in that field.
+- Icon buttons have `aria-label`. The menu and search drawers are modal dialogs. Search is a combobox with a listbox, and the arrow keys, Enter, and Escape work in that field. When the query reads like a feeling, the first option is Search by mood, and those same keys reach it. Mood chips are buttons in a group, and the arrow keys move between them. The mood field is named by the headline and described by the on-device line. A polite live region announces the mood steps.
 - The primary nav and the search sort links set `aria-current`. Filter pills and the save control set `aria-pressed`. The hero carousel exposes a tab list, and slides that are not showing are `aria-hidden`.
-- The hero does not autoplay when `prefers-reduced-motion: reduce` matches. The stylesheet then cuts animation and transition duration to 1ms and stops the hero progress animation.
+- The film hero does not autoplay when `prefers-reduced-motion: reduce` matches. The stylesheet then cuts animation and transition duration to 1ms and stops the hero progress animation. The mood placeholder stays on the first example, and the caret does not blink.
 - Header controls, search rows, hero actions, row arrows, and the newsletter field are 44px. Filter pills are 44px on a coarse pointer.
 - The detail poster alt text is the title plus "poster". Decorative stills use empty alt text. The newsletter email label is visually hidden, and the status line is `aria-live="polite"`.
 - The trailer dialog names the title, and the close control is labeled "Close trailer".
@@ -215,7 +215,8 @@ What the interface actually implements for accessibility:
 - TMDB, called only from the Next.js server
 
 ```
-app/page.tsx                         home catalogue and mood search
+app/page.tsx                         home mood hero and catalogue rows
+app/mood/page.tsx                    /mood?q= opens the home hero and runs the search
 app/spike/page.tsx                   on-device check
 app/movie/[id]/page.tsx              film page
 app/tv/[id]/page.tsx                 series page
@@ -225,7 +226,8 @@ app/browse/[list]/page.tsx           catalogue lists
 app/saved/page.tsx                   saved titles
 app/recent/page.tsx                  recently viewed
 app/api/tmdb/[...path]/route.ts      server proxy to TMDB
-components/mood-search.tsx           mood field, steps, summary
+components/mood-search.tsx           mood hero, chips, steps, summary, poster rail
+lib/mood-query.ts                    local check for a feeling versus a title
 components/spike-panel.tsx           Chrome and Nano check
 lib/firebase-ai.ts                   getAI, getGenerativeModel, App Check
 lib/language.ts                      on-device language route

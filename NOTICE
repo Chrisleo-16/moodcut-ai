@@ -1,0 +1,38 @@
+Moodcut
+Copyright 2026 Chrisben Evans Leo
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+It includes or uses the third-party works listed below. Each is the property of
+its owner and is used under its own licence or terms.
+
+DATA AND MEDIA SERVICES
+- The Movie Database (TMDB), https://www.themoviedb.org/
+  This product uses the TMDB API but is not endorsed or certified by TMDB.
+  Film, series, and people data and images are provided by TMDB and are loaded
+  at runtime from image.tmdb.org. No TMDB images are stored in this repository.
+- YouTube. Official trailers are shown with the standard embedded player from
+  youtube-nocookie.com. Videos are not downloaded or re-hosted.
+- "Sintel" (sample trailer in preview mode), copyright Blender Foundation,
+  https://durian.blender.org/, licensed under CC BY 3.0. Embedded from the
+  official Blender YouTube channel.
+- Gemini Nano in Chrome and the Gemini API through Firebase AI Logic, provided
+  by Google under the Google APIs Terms of Service and the Gemini API terms.
+  Moodcut is not affiliated with or endorsed by Google.
+
+FONTS (loaded through next/font/google, licensed under the SIL Open Font
+License, Version 1.1)
+- Anton, by Vernon Adams
+- Inter Tight, by The Inter Project Authors
+- Crimson Pro, by The Crimson Pro Project Authors
+- Montserrat, by The Montserrat Project Authors
+
+SOFTWARE LIBRARIES
+- Next.js, copyright Vercel, Inc., MIT License
+- React and React DOM, copyright Meta Platforms, Inc. and affiliates, MIT License
+- HeroUI (@heroui/react, @heroui/styles), copyright the HeroUI authors, MIT License
+- Tailwind CSS, copyright Tailwind Labs, Inc., MIT License
+- Firebase JavaScript SDK, copyright Google LLC, Apache License 2.0
+- server-only, MIT License
+
+The full licence texts of the npm dependencies are included in each package
+inside node_modules after installation.

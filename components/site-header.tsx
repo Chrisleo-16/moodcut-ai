@@ -8,6 +8,7 @@ import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 import { useWatchlist } from "@/components/watchlist";
 import { CatalogueError, fetchCatalogue } from "@/lib/client-api";
 import { firstGenre, imageUrl, toCard, toPerson } from "@/lib/media";
+import { looksLikeMood, moodSearchHref } from "@/lib/mood-query";
 import { previewCards } from "@/lib/preview";
 import type { TmdbPaged } from "@/lib/types";
 
@@ -29,6 +30,10 @@ const GENRES = [
   ["10749", "Romance"],
 ] as const;
 
+type SearchPick =
+  | { kind: "mood"; query: string }
+  | { kind: "title"; href: string };
+
 type Suggestion = {
   href: string;
   title: string;
@@ -42,7 +47,7 @@ type Suggestion = {
 export function SiteHeader() {
   const path = usePathname();
   const router = useRouter();
-  const light = path === "/" || path.startsWith("/movie/") || path.startsWith("/tv/");
+  const light = path.startsWith("/movie/") || path.startsWith("/tv/");
   const { items } = useWatchlist();
   const [sticky, setSticky] = useState(false);
   const [menu, setMenu] = useState(false);
@@ -151,12 +156,35 @@ export function SiteHeader() {
   const trimmed = query.trim();
   const visible = trimmed.length >= 2 && stamp === trimmed ? suggestions : [];
   const searching = trimmed.length >= 2 && stamp !== trimmed;
+  const moodOffer = looksLikeMood(
+    trimmed,
+    visible.map((item) => item.title),
+  );
+  const picks: SearchPick[] = [];
+  if (moodOffer) picks.push({ kind: "mood", query: trimmed });
+  for (const item of visible) picks.push({ kind: "title", href: item.href });
+  const titleOffset = moodOffer ? 1 : 0;
 
   function go(href: string) {
     setSearch(false);
     setMenu(false);
     setQuery("");
     router.push(href);
+  }
+
+  function openPick(pick: SearchPick) {
+    switch (pick.kind) {
+      case "mood":
+        go(moodSearchHref(pick.query));
+        return;
+      case "title":
+        go(pick.href);
+        return;
+      default: {
+        const unexpected: never = pick;
+        return unexpected;
+      }
+    }
   }
 
   function onKey(event: KeyboardEvent<HTMLInputElement>) {
@@ -166,7 +194,7 @@ export function SiteHeader() {
     }
     if (event.key === "ArrowDown") {
       event.preventDefault();
-      setActive((current) => Math.min(current + 1, visible.length - 1));
+      setActive((current) => Math.min(current + 1, picks.length - 1));
     }
     if (event.key === "ArrowUp") {
       event.preventDefault();
@@ -174,7 +202,8 @@ export function SiteHeader() {
     }
     if (event.key === "Enter") {
       event.preventDefault();
-      if (active >= 0 && visible[active]) go(visible[active].href);
+      const pick = active >= 0 ? picks[active] : undefined;
+      if (pick) openPick(pick);
       else if (trimmed) go(`/search?q=${encodeURIComponent(trimmed)}`);
     }
   }
@@ -251,6 +280,7 @@ export function SiteHeader() {
             <div className="menu-sec">
               <h2 className="menu-h">Browse the Films</h2>
               <Link className="menu-link" href="/" onClick={() => setMenu(false)}>Home</Link>
+              <Link className="menu-link" href="/#mood" onClick={() => setMenu(false)}>Mood search</Link>
               <Link className="menu-link" href="/browse/all" onClick={() => setMenu(false)}>All films</Link>
               <Link className="menu-link" href="/browse/now-playing" onClick={() => setMenu(false)}>In theaters</Link>
               <Link className="menu-link" href="/browse/upcoming" onClick={() => setMenu(false)}>Coming soon</Link>
@@ -296,23 +326,42 @@ export function SiteHeader() {
                   ref={inputRef}
                   className="s-input"
                   value={query}
-                  onChange={(event) => setQuery(event.target.value)}
+                  onChange={(event) => {
+                    setQuery(event.target.value);
+                    setActive(-1);
+                  }}
                   onKeyDown={onKey}
                   placeholder="Search"
                   role="combobox"
-                  aria-expanded={visible.length > 0}
+                  aria-expanded={picks.length > 0}
                   aria-controls={listId}
                   aria-autocomplete="list"
+                  aria-activedescendant={active >= 0 ? `${listId}-opt-${active}` : undefined}
                 />
                 <button className="s-submit" type="submit" aria-label="Show all results"><ArrowIcon /></button>
               </div>
               <p className="s-hint">
-                Or describe a mood on the <button type="button" onClick={() => go("/#mood")}>mood search</button>
+                A feeling can use Search by mood, or the field on the <button type="button" onClick={() => go("/#mood")}>home page</button>.
               </p>
             </form>
-            <div id={listId} className="sugg" role="listbox">
+            <div id={listId} className="sugg" role="listbox" aria-label="Search suggestions">
+              {moodOffer ? (
+                <button
+                  id={`${listId}-opt-0`}
+                  type="button"
+                  role="option"
+                  aria-selected={active === 0}
+                  className={active === 0 ? "sugg-item sugg-mood is-active" : "sugg-item sugg-mood"}
+                  onClick={() => go(moodSearchHref(trimmed))}
+                >
+                  <MoodIcon />
+                  <span className="sugg-mood-copy">{`Search by mood: "${trimmed}"`}</span>
+                </button>
+              ) : null}
               {searching ? <p className="sugg-meta">Searching…</p> : null}
-              {!searching && trimmed.length >= 2 && visible.length === 0 ? <p className="sugg-meta">No matches yet.</p> : null}
+              {!searching && trimmed.length >= 2 && visible.length === 0 ? (
+                <p className="sugg-meta">{moodOffer ? "No title matches yet." : "No matches yet."}</p>
+              ) : null}
               {(["Films", "Television", "People"] as const).map((group) => {
                 const rows = visible.filter((item) => item.group === group);
                 if (rows.length === 0) return null;
@@ -320,10 +369,11 @@ export function SiteHeader() {
                   <div key={group} className="sugg-group">
                     <p className="sugg-glabel">{group}</p>
                     {rows.map((item) => {
-                      const index = visible.indexOf(item);
+                      const index = visible.indexOf(item) + titleOffset;
                       return (
                         <button
                           key={item.href}
+                          id={`${listId}-opt-${index}`}
                           type="button"
                           role="option"
                           aria-selected={index === active}
@@ -369,6 +419,15 @@ function escapeRegExp(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+function MoodIcon() {
+  return (
+    <svg className="sugg-mood-icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden>
+      <circle cx="12" cy="12" r="8" />
+      <path d="M9 10.2h.01M15 10.2h.01" strokeLinecap="round" />
+      <path d="M8.5 13.6c.8 1.15 1.95 1.7 3.5 1.7s2.7-.55 3.5-1.7" />
+    </svg>
+  );
+}
 function SearchIcon() {
   return <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden><circle cx="10.5" cy="10.5" r="6.5" /><path d="M15.5 15.5 21 21" /></svg>;
 }
